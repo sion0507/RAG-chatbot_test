@@ -1,0 +1,28 @@
+# configs/models.yaml
+embedder:
+  name: dragonkue/multilingual-e5-small-ko-v2
+  local_dir: models/embedder
+  device: cpu
+  batch_size: 16                 # CPU/램이 충분하면 32로 늘려도 괜찮음
+  max_length: 512                # 임베더 허용가능 토큰수 및 청크들 토큰수 확인하고 조정 가능
+  normalize_embeddings: true     # 코사인 기반 유사도 구할때 일관성 올라감
+
+reranker:
+  enabled: true
+  name: dragonkue/bge-reranker-v2-m3-ko
+  local_dir: models/reranker
+  device: cpu
+  batch_size: 8                  # CPU/램 조건에 따라 16 이나 4로 변경 가능(작동 시간 체크)
+  max_length: 512                # 질문 + 청크 토큰 수 보고 줄일 수 있으면 줄이기
+
+llm:
+  backend: llama_cpp
+  gguf_path: models/llm/qwen2.5-14b-instruct-q4_k_m.gguf
+  # llama.cpp 옵션(기본값은 보수적으로) 전부 설정 필요
+  n_ctx: 4096                    # 컨텍스트 윈도우, 크게 잡을 수록 좋음 KV캐시 사용량 보고 늘리기
+  temperature: 0.2               # 무작위성(창의성) 조절
+  top_p: 0.9                     # 확률 상위 p 누적 범위 안에서만 토큰을 뽑는 샘플링 제한(보수적으로 0.9)
+  max_tokens: 512                # 모델이 답변 생성시 최대 토큰수
+  repeat_penalty: 1.1            # 같은 표현 반복 제한 변수
+  stop:
+    - "</s>"                         # 이 토큰(문자열) 나오면 즉시 출력 중단

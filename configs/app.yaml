@@ -1,0 +1,15 @@
+project_name: rag-chatbot
+mode: cli            # cli | server
+language: ko
+
+paths:
+  data_raw: data/raw
+  data_interim: data/interim
+  data_processed: data/processed
+  indexes: indexes
+  models: models
+  logs: logs
+
+runtime:
+  seed: 42 # 설정 필요
+  streaming: false # 확인 필요

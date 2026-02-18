@@ -1,0 +1,51 @@
+# pycache무시
+__pycache__/
+*.pyc
+
+# ==== Virtual env ====
+.venv/
+venv/
+ENV/
+env/
+
+# ==== Env / secrets ====
+.env
+.env.*
+!.env.example
+
+# ==== Logs ====
+logs/
+*.log
+
+# ==== Data (raw/interim/processed/eval outputs) ====
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# ==== Models (very large) ====
+models/**
+!models/**/
+!models/**/.gitkeep
+
+# ==== Indexes (rebuildable artifacts) ====
+indexes/**
+!indexes/**/
+!indexes/**/.gitkeep
+
+# ==== Packages (vendored libs) ====
+packages/**
+!packages/**/
+!packages/**/.gitkeep
+
+# ==== Tools ====
+tools/**
+
+# ==== Wheels (offline pip cache) ====
+wheels/**
+!wheels/**/
+!wheels/**/.gitkeep
+
+# ==== Notebooks ====
+notebooks/**
+!notebooks/**/
+!notebooks/**/.gitkeep

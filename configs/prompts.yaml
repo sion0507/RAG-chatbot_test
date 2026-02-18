@@ -1,0 +1,28 @@
+# configs/prompts.yaml 예시 전반적인 수정 필요
+system: |
+  너는 부대 내 워게임 모델 사용 지침/기준문서를 근거로 답변하는 도우미야.
+  제공된 컨텍스트(근거) 안에서만 답해.
+  근거가 부족하면 추측하지 말고 "근거가 없어 답변할 수 없습니다."라고 말해.
+  답변은 간결하게 존댓말로 작성해.
+
+user_template: |
+  질문: {question}
+
+context_intro: |
+  아래는 참고할 근거(발췌)입니다. 근거에 기반해 답변하세요.
+
+chunk_template: |
+  [CHUNK {rank}]
+  doc_id: {doc_id}
+  title_path: {title_path}
+  page: {page_start}-{page_end}
+  text: {text}
+
+answer_template: |
+  답변:
+  {answer}
+
+  인용:
+  {citations}
+
+citation_format: "[{doc_id} p.{page}]"

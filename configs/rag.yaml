@@ -1,0 +1,27 @@
+# configs/rag.yaml
+chunking:
+  strategy: heading_aware      # heading_aware | hierarchical
+  max_chars: 1400              # 설정 필요
+  overlap_chars: 150           # 설정 필요
+  min_chars: 300               # 설정 필요
+
+retrieval:
+  use_vector: true
+  use_bm25: true
+  top_k_vector: 20             # 설정 필요
+  top_k_bm25: 20               # 설정 필요
+  hybrid_alpha: 0.5            # vector와 bm25를 섞을 때만 사용 (0~1)
+
+rerank:
+  enabled: false
+  rerank_top_k: 8              # 설정 필요
+
+context:
+  max_context_chars: 6000      # 설정 필요
+  max_chunks_in_context: 8     # 설정 필요
+  include_chunk_header: true   # doc/page/title_path를 컨텍스트에 붙일지
+
+grounding:
+  require_citations: true
+  abstain_if_no_evidence: true
+  min_cited_chunks: 1

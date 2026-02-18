@@ -1,0 +1,27 @@
+# configs/logging.yaml 예시 전반적인 수정 필요
+version: 1
+
+formatters:
+  standard:
+    format: "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: standard
+    stream: ext://sys.stdout
+
+root:
+  level: INFO
+  handlers: [console]
+
+loggers:
+  rag:
+    level: INFO
+  ingest:
+    level: INFO
+  llm:
+    level: INFO
+  embed:
+    level: INFO
