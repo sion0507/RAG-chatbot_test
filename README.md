@@ -36,3 +36,12 @@
 ### ingest 실행 예시
 - `python -m src.ingest.build_corpus --data-raw-dir data/raw --output data/processed/corpus.jsonl`
 - 산출물 `corpus.jsonl`은 각 줄이 JSON이며, 최소 메타데이터(`doc_id`, `section_path`, `heading`, `chunk_id`, `chunk_index`, `page_start`, `page_end`, `chunk_tokens`)를 포함합니다.
+
+
+### 인덱싱 실행 예시
+- `python -m src.embed.build_indexes --corpus data/processed/corpus.jsonl --output-root indexes`
+- 산출물
+  - `indexes/chunks/chunks_store.jsonl`
+  - `indexes/vector/faiss.index`, `indexes/vector/id_map.jsonl`
+  - `indexes/bm25/bm25.pkl`, `indexes/bm25/id_map.jsonl`
+
