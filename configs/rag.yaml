@@ -13,8 +13,8 @@ retrieval:
   hybrid_alpha: 0.5            # vector와 bm25를 섞을 때만 사용 (0~1)
 
 rerank:
-  enabled: false
-  rerank_top_k: 8              # 설정 필요
+  enabled: true               # 리랭킹 단계는 필수 적용
+  rerank_top_k: 8             # 최종 Top-N 선정을 위한 리랭킹 대상 수
 
 context:
   max_context_chars: 6000      # 설정 필요
