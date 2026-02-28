@@ -8,10 +8,21 @@ from pathlib import Path
 import numpy as np
 
 from src.embed.build_indexes import build_indexes
-from src.rag.retriever import HybridRetriever
+from src.rag.retriever import HybridRetriever, _min_max_normalize
 
 
 class RetrievalPipelineTest(unittest.TestCase):
+    def test_min_max_normalize_returns_zero_when_all_scores_equal(self) -> None:
+        normalized = _min_max_normalize([
+            ("manual:0", 0.5),
+            ("manual:1", 0.5),
+            ("manual:2", 0.5),
+        ])
+
+        self.assertEqual(normalized["manual:0"], 0.0)
+        self.assertEqual(normalized["manual:1"], 0.0)
+        self.assertEqual(normalized["manual:2"], 0.0)
+
     def test_hybrid_retrieval_dedup_and_rerank_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

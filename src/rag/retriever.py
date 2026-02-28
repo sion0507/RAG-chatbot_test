@@ -177,7 +177,7 @@ def _min_max_normalize(pairs: list[tuple[str, float]]) -> dict[str, float]:
     hi = max(values)
 
     if np.isclose(hi, lo):
-        return {chunk_id: 1.0 for chunk_id, _ in pairs}
+        return {chunk_id: 0.0 for chunk_id, _ in pairs}
 
     return {chunk_id: (score - lo) / (hi - lo) for chunk_id, score in pairs}
 
