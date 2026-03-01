@@ -7,7 +7,7 @@ import logging
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
 
 import faiss
 import numpy as np
@@ -29,12 +29,35 @@ class RetrievalCandidate:
 
 
 @dataclass(frozen=True)
+class FinalCandidate:
+    """Final candidate to be used for LLM context."""
+
+    chunk: ChunkRecord
+    retrieval_score: float
+    rerank_score: float | None
+
+
+@dataclass(frozen=True)
 class RetrievalResult:
-    """Retrieval output used as reranker input."""
+    """Retrieval output used as reranker input and final context selection."""
 
     query: str
     candidates: list[RetrievalCandidate]
     rerank_candidates: list[RetrievalCandidate]
+    final_candidates: list[FinalCandidate]
+    used_reranker: bool
+
+
+class RerankerProtocol(Protocol):
+    """Reranker contract for retrieval orchestration."""
+
+    def rerank(
+        self,
+        *,
+        query: str,
+        candidates: list[RetrievalCandidate],
+        top_n: int,
+    ) -> list[object]: ...
 
 
 class HybridRetriever:
@@ -54,7 +77,7 @@ class HybridRetriever:
         top_k_vector: int = 20,
         top_k_bm25: int = 20,
         hybrid_alpha: float = 0.5,
-        rerank_top_k: int = 8,
+        rerank_top_k: int = 15,
     ) -> None:
         if not use_vector and not use_bm25:
             raise ValueError("At least one retrieval backend must be enabled.")
@@ -84,7 +107,6 @@ class HybridRetriever:
             self._vector_id_map = _load_index_id_map(vector_id_map_path)
 
         self._bm25_index = None
-        self._bm25_tokenized_corpus: list[list[str]] = []
         self._bm25_id_map: list[str] = []
         if use_bm25:
             if bm25_index_path is None or bm25_id_map_path is None:
@@ -92,10 +114,9 @@ class HybridRetriever:
             with Path(bm25_index_path).open("rb") as fp:
                 payload = pickle.load(fp)
             self._bm25_index = payload["index"]
-            self._bm25_tokenized_corpus = payload["tokenized_corpus"]
             self._bm25_id_map = _load_index_id_map(bm25_id_map_path)
 
-    def retrieve(self, query: str) -> RetrievalResult:
+    def retrieve_for_rerank(self, query: str) -> RetrievalResult:
         """Search by query and return sorted candidates and rerank subset."""
         merged: dict[str, dict[str, float]] = {}
 
@@ -128,8 +149,89 @@ class HybridRetriever:
 
         candidates.sort(key=lambda item: item.final_score, reverse=True)
         rerank_candidates = candidates[: self._rerank_top_k]
+        fallback_final = [
+            FinalCandidate(chunk=item.chunk, retrieval_score=item.final_score, rerank_score=None)
+            for item in rerank_candidates
+        ]
 
-        return RetrievalResult(query=query, candidates=candidates, rerank_candidates=rerank_candidates)
+        return RetrievalResult(
+            query=query,
+            candidates=candidates,
+            rerank_candidates=rerank_candidates,
+            final_candidates=fallback_final,
+            used_reranker=False,
+        )
+
+    def retrieve(
+        self,
+        query: str,
+        *,
+        reranker: RerankerProtocol | None = None,
+        final_top_n: int = 5,
+    ) -> RetrievalResult:
+        """Return final candidates for LLM context via optional reranking."""
+        if final_top_n <= 0:
+            raise ValueError("final_top_n must be a positive integer.")
+
+        result = self.retrieve_for_rerank(query)
+
+        if reranker is None:
+            return RetrievalResult(
+                query=result.query,
+                candidates=result.candidates,
+                rerank_candidates=result.rerank_candidates,
+                final_candidates=result.final_candidates[:final_top_n],
+                used_reranker=False,
+            )
+
+        try:
+            reranked = reranker.rerank(
+                query=query,
+                candidates=result.rerank_candidates,
+                top_n=final_top_n,
+            )
+        except Exception as exc:  # pragma: no cover - covered by integration test behavior
+            LOGGER.warning("리랭커 실패로 하이브리드 결과 fallback: %s", exc)
+            return RetrievalResult(
+                query=result.query,
+                candidates=result.candidates,
+                rerank_candidates=result.rerank_candidates,
+                final_candidates=result.final_candidates[:final_top_n],
+                used_reranker=False,
+            )
+
+        final_candidates: list[FinalCandidate] = []
+        for item in reranked:
+            chunk = getattr(item, "chunk", None)
+            retrieval_score = float(getattr(item, "retrieval_score", 0.0))
+            rerank_score = float(getattr(item, "rerank_score", 0.0))
+            if chunk is None:
+                continue
+            final_candidates.append(
+                FinalCandidate(
+                    chunk=chunk,
+                    retrieval_score=retrieval_score,
+                    rerank_score=rerank_score,
+                )
+            )
+
+        if not final_candidates:
+            LOGGER.warning("리랭커 결과가 비어 fallback 수행")
+            return RetrievalResult(
+                query=result.query,
+                candidates=result.candidates,
+                rerank_candidates=result.rerank_candidates,
+                final_candidates=result.final_candidates[:final_top_n],
+                used_reranker=False,
+            )
+
+        return RetrievalResult(
+            query=result.query,
+            candidates=result.candidates,
+            rerank_candidates=result.rerank_candidates,
+            final_candidates=final_candidates,
+            used_reranker=True,
+        )
 
     def _vector_search(self, query: str) -> dict[str, float]:
         query_vector = self._embed_query(query)
