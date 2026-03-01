@@ -45,7 +45,6 @@ class RetrievalResult:
     candidates: list[RetrievalCandidate]
     rerank_candidates: list[RetrievalCandidate]
     final_candidates: list[FinalCandidate]
-    used_reranker: bool
 
 
 class RerankerProtocol(Protocol):
@@ -149,24 +148,18 @@ class HybridRetriever:
 
         candidates.sort(key=lambda item: item.final_score, reverse=True)
         rerank_candidates = candidates[: self._rerank_top_k]
-        fallback_final = [
-            FinalCandidate(chunk=item.chunk, retrieval_score=item.final_score, rerank_score=None)
-            for item in rerank_candidates
-        ]
-
         return RetrievalResult(
             query=query,
             candidates=candidates,
             rerank_candidates=rerank_candidates,
-            final_candidates=fallback_final,
-            used_reranker=False,
+            final_candidates=[],
         )
 
     def retrieve(
         self,
         query: str,
         *,
-        reranker: RerankerProtocol | None = None,
+        reranker: RerankerProtocol,
         final_top_n: int = 5,
     ) -> RetrievalResult:
         """Return final candidates for LLM context via optional reranking."""
@@ -175,30 +168,11 @@ class HybridRetriever:
 
         result = self.retrieve_for_rerank(query)
 
-        if reranker is None:
-            return RetrievalResult(
-                query=result.query,
-                candidates=result.candidates,
-                rerank_candidates=result.rerank_candidates,
-                final_candidates=result.final_candidates[:final_top_n],
-                used_reranker=False,
-            )
-
-        try:
-            reranked = reranker.rerank(
-                query=query,
-                candidates=result.rerank_candidates,
-                top_n=final_top_n,
-            )
-        except Exception as exc:  # pragma: no cover - covered by integration test behavior
-            LOGGER.warning("리랭커 실패로 하이브리드 결과 fallback: %s", exc)
-            return RetrievalResult(
-                query=result.query,
-                candidates=result.candidates,
-                rerank_candidates=result.rerank_candidates,
-                final_candidates=result.final_candidates[:final_top_n],
-                used_reranker=False,
-            )
+        reranked = reranker.rerank(
+            query=query,
+            candidates=result.rerank_candidates,
+            top_n=final_top_n,
+        )
 
         final_candidates: list[FinalCandidate] = []
         for item in reranked:
@@ -216,21 +190,13 @@ class HybridRetriever:
             )
 
         if not final_candidates:
-            LOGGER.warning("리랭커 결과가 비어 fallback 수행")
-            return RetrievalResult(
-                query=result.query,
-                candidates=result.candidates,
-                rerank_candidates=result.rerank_candidates,
-                final_candidates=result.final_candidates[:final_top_n],
-                used_reranker=False,
-            )
+            raise ValueError("리랭커 결과가 비어 있습니다.")
 
         return RetrievalResult(
             query=result.query,
             candidates=result.candidates,
             rerank_candidates=result.rerank_candidates,
             final_candidates=final_candidates,
-            used_reranker=True,
         )
 
     def _vector_search(self, query: str) -> dict[str, float]:

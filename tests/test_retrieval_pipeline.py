@@ -91,7 +91,19 @@ class RetrievalPipelineTest(unittest.TestCase):
                 rerank_top_k=2,
             )
 
-            result = retriever.retrieve("시뮬레이션 점검")
+            class IdentityReranker:
+                def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
+                    _ = query
+                    return [
+                        type("Obj", (), {
+                            "chunk": item.chunk,
+                            "retrieval_score": item.final_score,
+                            "rerank_score": item.final_score,
+                        })()
+                        for item in candidates[:top_n]
+                    ]
+
+            result = retriever.retrieve("시뮬레이션 점검", reranker=IdentityReranker(), final_top_n=2)
 
             self.assertGreaterEqual(len(result.candidates), 2)
             self.assertEqual(len(result.rerank_candidates), 2)
@@ -157,9 +169,22 @@ class RetrievalPipelineTest(unittest.TestCase):
                 rerank_top_k=1,
             )
 
-            result = retriever.retrieve("아무 질문")
+            class IdentityReranker:
+                def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
+                    _ = query
+                    return [
+                        type("Obj", (), {
+                            "chunk": item.chunk,
+                            "retrieval_score": item.final_score,
+                            "rerank_score": item.final_score,
+                        })()
+                        for item in candidates[:top_n]
+                    ]
+
+            result = retriever.retrieve("아무 질문", reranker=IdentityReranker(), final_top_n=1)
             self.assertEqual(result.candidates[0].chunk.chunk_id, "manual:0")
             self.assertEqual(len(result.rerank_candidates), 1)
+            self.assertEqual(result.final_candidates[0].chunk.chunk_id, "manual:0")
 
 
     def test_retrieve_with_reranker_uses_rerank_order(self) -> None:
@@ -231,10 +256,9 @@ class RetrievalPipelineTest(unittest.TestCase):
                     ]
 
             result = retriever.retrieve("아무 질문", reranker=FakeReranker(), final_top_n=1)
-            self.assertTrue(result.used_reranker)
             self.assertEqual(result.final_candidates[0].chunk.chunk_id, "manual:1")
 
-    def test_retrieve_fallback_when_reranker_errors(self) -> None:
+    def test_retrieve_raises_when_reranker_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             corpus = root / "corpus.jsonl"
@@ -278,9 +302,8 @@ class RetrievalPipelineTest(unittest.TestCase):
                 def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
                     raise RuntimeError("boom")
 
-            result = retriever.retrieve("아무 질문", reranker=BrokenReranker(), final_top_n=1)
-            self.assertFalse(result.used_reranker)
-            self.assertEqual(result.final_candidates[0].chunk.chunk_id, "manual:0")
+            with self.assertRaises(RuntimeError):
+                retriever.retrieve("아무 질문", reranker=BrokenReranker(), final_top_n=1)
 
 
 if __name__ == "__main__":

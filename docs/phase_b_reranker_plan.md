@@ -32,9 +32,9 @@
   선택적으로 `rerank()` 호출을 수행하는 오케스트레이션 메서드 추가.
 - 예시:
   - `retrieve_for_rerank(query, rerank_top_k=15)` → 하이브리드 1차 후보(권장 10~20개)
-  - `retrieve(query, reranker=None, final_top_n=5)`
-    - `reranker is None`이면 기존 fallback(phase A 결과)
-    - `reranker`가 있으면 `rerank_candidates`를 리랭킹 후 최종 Top-N(권장 3~5) 반환
+  - `retrieve(query, reranker, final_top_n=5)`
+    - `reranker`는 필수 입력으로 강제
+    - `rerank_candidates`를 리랭킹해 최종 Top-N(권장 3~5) 반환
 
 ### 2.3 설정 반영
 - `configs/models.yaml`
@@ -52,8 +52,8 @@
 - 최종 응답 페이로드에 리랭크 점수와 인용 메타데이터를 포함할 수 있게 스키마 확장
 
 ## 3) 오류/운영 처리 기준
-- 리랭커 모델 로딩 실패 시:
-  - 에러 원인을 로그에 남기고, phase A 결과만으로 degraded 모드 동작 가능하게 처리
+- 리랭커 모델 로딩/실행 실패 시:
+  - 예외를 상위로 전달해 요청 실패로 처리(필수 단계 비활성화 은닉 금지)
 - 후보 수가 `rerank_top_k`보다 적은 경우:
   - 가능한 후보만 리랭킹하고 정상 반환
 - 오프라인 운영:
@@ -69,7 +69,7 @@
 ### 4.2 통합 테스트(`tests/test_retrieval_pipeline.py` 확장)
 - 기존 phase A 테스트 유지
 - 리랭커 주입 시 최종 순서가 retrieval 점수와 달라지는 케이스 검증
-- 리랭커 예외 발생 시 fallback 동작 검증
+- 리랭커 예외 발생 시 예외 전파(실패 처리) 검증
 
 ## 5) 작업 순서(권장)
 1. `reranker.py` + 단위 테스트 추가
