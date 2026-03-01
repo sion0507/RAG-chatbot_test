@@ -91,7 +91,19 @@ class RetrievalPipelineTest(unittest.TestCase):
                 rerank_top_k=2,
             )
 
-            result = retriever.retrieve("시뮬레이션 점검")
+            class IdentityReranker:
+                def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
+                    _ = query
+                    return [
+                        type("Obj", (), {
+                            "chunk": item.chunk,
+                            "retrieval_score": item.final_score,
+                            "rerank_score": item.final_score,
+                        })()
+                        for item in candidates[:top_n]
+                    ]
+
+            result = retriever.retrieve("시뮬레이션 점검", reranker=IdentityReranker(), final_top_n=2)
 
             self.assertGreaterEqual(len(result.candidates), 2)
             self.assertEqual(len(result.rerank_candidates), 2)
@@ -157,9 +169,141 @@ class RetrievalPipelineTest(unittest.TestCase):
                 rerank_top_k=1,
             )
 
-            result = retriever.retrieve("아무 질문")
+            class IdentityReranker:
+                def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
+                    _ = query
+                    return [
+                        type("Obj", (), {
+                            "chunk": item.chunk,
+                            "retrieval_score": item.final_score,
+                            "rerank_score": item.final_score,
+                        })()
+                        for item in candidates[:top_n]
+                    ]
+
+            result = retriever.retrieve("아무 질문", reranker=IdentityReranker(), final_top_n=1)
             self.assertEqual(result.candidates[0].chunk.chunk_id, "manual:0")
             self.assertEqual(len(result.rerank_candidates), 1)
+            self.assertEqual(result.final_candidates[0].chunk.chunk_id, "manual:0")
+
+
+    def test_retrieve_with_reranker_uses_rerank_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            corpus = root / "corpus.jsonl"
+            indexes = root / "indexes"
+
+            rows = [
+                {
+                    "doc_id": "manual",
+                    "section_path": "1.개요",
+                    "heading": "개요",
+                    "chunk_id": "manual:0",
+                    "chunk_index": 0,
+                    "page_start": 1,
+                    "page_end": 1,
+                    "text": "알파",
+                    "chunk_tokens": 1,
+                },
+                {
+                    "doc_id": "manual",
+                    "section_path": "2.절차",
+                    "heading": "절차",
+                    "chunk_id": "manual:1",
+                    "chunk_index": 1,
+                    "page_start": 2,
+                    "page_end": 2,
+                    "text": "베타",
+                    "chunk_tokens": 1,
+                },
+            ]
+            corpus.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+
+            def fake_embed(texts: list[str]) -> np.ndarray:
+                mapping = {
+                    "알파": np.array([1.0, 0.0], dtype=np.float32),
+                    "베타": np.array([0.0, 1.0], dtype=np.float32),
+                }
+                return np.stack([mapping[text] for text in texts])
+
+            build_indexes(corpus, indexes, embed_texts=fake_embed)
+
+            retriever = HybridRetriever(
+                chunk_store_path=indexes / "chunks" / "chunks_store.jsonl",
+                vector_index_path=indexes / "vector" / "faiss.index",
+                vector_id_map_path=indexes / "vector" / "id_map.jsonl",
+                bm25_index_path=None,
+                bm25_id_map_path=None,
+                embed_query=lambda _: np.array([1.0, 0.0], dtype=np.float32),
+                use_vector=True,
+                use_bm25=False,
+                top_k_vector=2,
+                top_k_bm25=1,
+                rerank_top_k=2,
+            )
+
+            class FakeReranker:
+                def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
+                    _ = query
+                    ordered = list(reversed(candidates))[:top_n]
+                    return [
+                        type("Obj", (), {
+                            "chunk": item.chunk,
+                            "retrieval_score": item.final_score,
+                            "rerank_score": float(100 - idx),
+                        })()
+                        for idx, item in enumerate(ordered)
+                    ]
+
+            result = retriever.retrieve("아무 질문", reranker=FakeReranker(), final_top_n=1)
+            self.assertEqual(result.final_candidates[0].chunk.chunk_id, "manual:1")
+
+    def test_retrieve_raises_when_reranker_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            corpus = root / "corpus.jsonl"
+            indexes = root / "indexes"
+
+            rows = [
+                {
+                    "doc_id": "manual",
+                    "section_path": "1.개요",
+                    "heading": "개요",
+                    "chunk_id": "manual:0",
+                    "chunk_index": 0,
+                    "page_start": 1,
+                    "page_end": 1,
+                    "text": "알파",
+                    "chunk_tokens": 1,
+                }
+            ]
+            corpus.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+
+            def fake_embed(texts: list[str]) -> np.ndarray:
+                return np.stack([np.array([1.0, 0.0], dtype=np.float32) for _ in texts])
+
+            build_indexes(corpus, indexes, embed_texts=fake_embed)
+
+            retriever = HybridRetriever(
+                chunk_store_path=indexes / "chunks" / "chunks_store.jsonl",
+                vector_index_path=indexes / "vector" / "faiss.index",
+                vector_id_map_path=indexes / "vector" / "id_map.jsonl",
+                bm25_index_path=None,
+                bm25_id_map_path=None,
+                embed_query=lambda _: np.array([1.0, 0.0], dtype=np.float32),
+                use_vector=True,
+                use_bm25=False,
+                top_k_vector=1,
+                top_k_bm25=1,
+                rerank_top_k=1,
+            )
+
+            class BrokenReranker:
+                def rerank(self, *, query: str, candidates: list, top_n: int) -> list:
+                    raise RuntimeError("boom")
+
+            with self.assertRaises(RuntimeError):
+                retriever.retrieve("아무 질문", reranker=BrokenReranker(), final_top_n=1)
 
 
 if __name__ == "__main__":
