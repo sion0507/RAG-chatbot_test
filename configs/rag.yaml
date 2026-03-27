@@ -26,3 +26,4 @@ grounding:
   require_citations: true
   abstain_if_no_evidence: true
   min_cited_chunks: 1
+  llm_abstain_enabled: true   # LLM 보조 판단으로 abstain 신호를 반영

@@ -37,6 +37,10 @@
   - `chunk_tokens`
 - `section_path`는 “문서 내 위치를 안정적으로 지칭”하기 위한 필드로 유지합니다.
 
+### Abstain 판단 정책
+- 1차는 규칙 기반(`abstain_if_no_evidence`, `min_cited_chunks`)으로 처리합니다.
+- 2차는 LLM 보조 신호(`needs_abstain`)를 선택적으로 반영할 수 있습니다.
+
 ## Pending(미확정/추후 결정)
 ### LLM 모델 구체 선택
 - 어떤 LLM(예: Qwen 계열/다른 계열), 파라미터 크기(7B/14B 등), 양자화 레벨은 아직 확정되지 않았습니다.
