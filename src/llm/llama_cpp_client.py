@@ -88,6 +88,13 @@ def _parse_llm_json(text: str) -> dict[str, Any]:
             "reason": "llm_output_not_json",
         }
 
+    if not isinstance(payload, dict):
+        return {
+            "answer": text,
+            "needs_abstain": False,
+            "reason": "llm_output_not_json",
+        }
+
     answer = str(payload.get("answer", "")).strip()
     needs_abstain = bool(payload.get("needs_abstain", False))
     reason = str(payload.get("reason", "")).strip()

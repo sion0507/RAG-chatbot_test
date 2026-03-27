@@ -52,6 +52,27 @@ class LlamaCppClientTest(unittest.TestCase):
         self.assertEqual(payload["answer"], "일반 텍스트 응답")
         self.assertEqual(payload["reason"], "llm_output_not_json")
 
+    def test_generate_falls_back_when_json_is_not_object(self) -> None:
+        def fake_completion(**kwargs):
+            _ = kwargs
+            return {"choices": [{"text": '["schema-adjacent", "output"]'}]}
+
+        client = LlamaCppClient(
+            gguf_path="unused.gguf",
+            n_ctx=1024,
+            temperature=0.2,
+            top_p=0.9,
+            max_tokens=256,
+            repeat_penalty=1.1,
+            stop=["</s>"],
+            create_completion=fake_completion,
+        )
+
+        payload = client.generate(system_prompt="sys", user_prompt="user")
+        self.assertEqual(payload["answer"], '["schema-adjacent", "output"]')
+        self.assertFalse(payload["needs_abstain"])
+        self.assertEqual(payload["reason"], "llm_output_not_json")
+
 
 if __name__ == "__main__":
     unittest.main()
