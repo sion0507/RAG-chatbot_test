@@ -9,6 +9,7 @@
 ### 추론 엔진
 - LLM 추론 엔진은 llama.cpp를 사용합니다.
 - 오프라인 운영을 위해 GGUF 등 로컬 로딩 가능한 형식을 우선 고려합니다.
+- 기본 배포 설정에서 llama.cpp의 `n_gpu_layers=-1`, `main_gpu=0`을 사용해 LLM 레이어를 VRAM에 우선 오프로딩합니다(환경에 맞게 조정 가능).
 
 ### 임베딩 모델
 - 임베딩 모델은 `dragonkue/multilingual-e5-small-ko-v2`를 사용합니다.

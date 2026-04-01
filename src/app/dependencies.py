@@ -63,6 +63,8 @@ def get_chat_service() -> ChatService:
     llm_client = LlamaCppClient(
         gguf_path=llm_cfg["gguf_path"],
         n_ctx=int(llm_cfg.get("n_ctx", 4096)),
+        n_gpu_layers=int(llm_cfg.get("n_gpu_layers", 0)),
+        main_gpu=int(llm_cfg.get("main_gpu", 0)),
         temperature=float(llm_cfg.get("temperature", 0.2)),
         top_p=float(llm_cfg.get("top_p", 0.9)),
         max_tokens=int(llm_cfg.get("max_tokens", 512)),
