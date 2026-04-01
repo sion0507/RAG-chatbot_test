@@ -15,6 +15,8 @@ class LlamaCppClient:
         *,
         gguf_path: str,
         n_ctx: int,
+        n_gpu_layers: int = 0,
+        main_gpu: int = 0,
         temperature: float,
         top_p: float,
         max_tokens: int,
@@ -24,6 +26,10 @@ class LlamaCppClient:
     ) -> None:
         if n_ctx <= 0:
             raise ValueError("n_ctx must be a positive integer.")
+        if n_gpu_layers < -1:
+            raise ValueError("n_gpu_layers must be -1(all) or non-negative integer.")
+        if main_gpu < 0:
+            raise ValueError("main_gpu must be a non-negative integer.")
         if max_tokens <= 0:
             raise ValueError("max_tokens must be a positive integer.")
 
@@ -43,7 +49,12 @@ class LlamaCppClient:
 
         from llama_cpp import Llama
 
-        self._model = Llama(model_path=str(model_path), n_ctx=n_ctx)
+        self._model = Llama(
+            model_path=str(model_path),
+            n_ctx=n_ctx,
+            n_gpu_layers=n_gpu_layers,
+            main_gpu=main_gpu,
+        )
         self._create_completion = self._model.create_completion
 
     def generate(self, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:

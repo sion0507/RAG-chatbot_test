@@ -18,6 +18,8 @@ reranker:
 llm:
   backend: llama_cpp
   gguf_path: models/llm/qwen2.5-14b-instruct-q4_k_m.gguf
+  n_gpu_layers: -1              # VRAM에 가능한 레이어를 모두 오프로딩(-1=전체)
+  main_gpu: 0                   # 단일 GPU 기준 0번 GPU 사용
   # llama.cpp 옵션(기본값은 보수적으로) 전부 설정 필요
   n_ctx: 4096                    # 컨텍스트 윈도우, 크게 잡을 수록 좋음 KV캐시 사용량 보고 늘리기
   temperature: 0.2               # 무작위성(창의성) 조절
