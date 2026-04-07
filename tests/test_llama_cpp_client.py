@@ -32,7 +32,7 @@ class LlamaCppClientTest(unittest.TestCase):
         self.assertEqual(payload["answer"], "근거 기반 답변")
         self.assertFalse(payload["needs_abstain"])
 
-    def test_generate_falls_back_when_non_json(self) -> None:
+    def test_generate_falls_back_to_abstain_when_non_json(self) -> None:
         def fake_completion(**kwargs):
             _ = kwargs
             return {"choices": [{"text": "일반 텍스트 응답"}]}
@@ -49,13 +49,25 @@ class LlamaCppClientTest(unittest.TestCase):
         )
 
         payload = client.generate(system_prompt="sys", user_prompt="user")
-        self.assertEqual(payload["answer"], "일반 텍스트 응답")
+        self.assertEqual(payload["answer"], "")
+        self.assertTrue(payload["needs_abstain"])
         self.assertEqual(payload["reason"], "llm_output_not_json")
 
-    def test_generate_falls_back_when_json_is_not_object(self) -> None:
+    def test_generate_extracts_first_json_from_chatty_output(self) -> None:
         def fake_completion(**kwargs):
             _ = kwargs
-            return {"choices": [{"text": '["schema-adjacent", "output"]'}]}
+            return {
+                "choices": [
+                    {
+                        "text": (
+                            '설명 텍스트\n'
+                            '{"answer":"부분 답변","needs_abstain":false,"reason":"draft"}\n'
+                            '<SYSTEM>\n'
+                            '{"answer":"","needs_abstain":true,"reason":"insufficient_context"}'
+                        )
+                    }
+                ]
+            }
 
         client = LlamaCppClient(
             gguf_path="unused.gguf",
@@ -69,9 +81,9 @@ class LlamaCppClientTest(unittest.TestCase):
         )
 
         payload = client.generate(system_prompt="sys", user_prompt="user")
-        self.assertEqual(payload["answer"], '["schema-adjacent", "output"]')
+        self.assertEqual(payload["answer"], "부분 답변")
         self.assertFalse(payload["needs_abstain"])
-        self.assertEqual(payload["reason"], "llm_output_not_json")
+        self.assertEqual(payload["reason"], "draft")
 
 
 if __name__ == "__main__":
