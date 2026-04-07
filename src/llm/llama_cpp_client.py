@@ -37,7 +37,7 @@ class LlamaCppClient:
         self._top_p = top_p
         self._max_tokens = max_tokens
         self._repeat_penalty = repeat_penalty
-        self._stop = stop or []
+        self._stop = _build_stop_sequences(stop)
 
         if create_completion is not None:
             self._create_completion = create_completion
@@ -60,14 +60,11 @@ class LlamaCppClient:
     def generate(self, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:
         """Generate answer text and optional LLM abstain signal."""
         prompt = (
-            "<SYSTEM>\n"
             f"{system_prompt}\n\n"
-            "<USER>\n"
             f"{user_prompt}\n\n"
-            "<FORMAT>\n"
-            "반드시 JSON 객체 1개로만 답하세요."
-            '키: answer(string), needs_abstain(boolean), reason(string).' 
-            "JSON 외 텍스트를 포함하지 마세요.\n"
+            "다음 스키마의 JSON 객체 1개만 출력하세요.\n"
+            '{"answer": string, "needs_abstain": boolean, "reason": string}\n'
+            "설명문, 마크다운, 코드블록, 추가 문장은 출력하지 마세요.\n"
         )
 
         output = self._create_completion(
@@ -83,29 +80,35 @@ class LlamaCppClient:
         return _parse_llm_json(text)
 
 
+def _build_stop_sequences(user_stop: list[str] | None) -> list[str]:
+    """Return default + user stop sequences while preserving order."""
+    defaults = ["</s>", "<SYSTEM>", "<USER>", "<FORMAT>", "<|im_end|>"]
+    merged = [*(user_stop or []), *defaults]
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in merged:
+        token = str(item).strip()
+        if not token or token in seen:
+            continue
+        deduped.append(token)
+        seen.add(token)
+    return deduped
+
+
 def _parse_llm_json(text: str) -> dict[str, Any]:
-    """Parse strict JSON contract; fallback to non-abstain plain answer."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        text = text.replace("json", "", 1).strip()
+    """Parse JSON contract; extract first JSON object if extra text exists."""
+    normalized = _strip_code_fence(text).strip()
+    candidates = _extract_json_objects(normalized)
 
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
+    if not candidates:
         return {
-            "answer": text,
-            "needs_abstain": False,
+            "answer": "",
+            "needs_abstain": True,
             "reason": "llm_output_not_json",
         }
 
-    if not isinstance(payload, dict):
-        return {
-            "answer": text,
-            "needs_abstain": False,
-            "reason": "llm_output_not_json",
-        }
-
+    payload = candidates[0]
     answer = str(payload.get("answer", "")).strip()
     needs_abstain = bool(payload.get("needs_abstain", False))
     reason = str(payload.get("reason", "")).strip()
@@ -115,3 +118,30 @@ def _parse_llm_json(text: str) -> dict[str, Any]:
         "needs_abstain": needs_abstain,
         "reason": reason,
     }
+
+
+def _strip_code_fence(text: str) -> str:
+    text = text.strip()
+    if not text.startswith("```"):
+        return text
+    stripped = text.strip("`")
+    if stripped.lower().startswith("json"):
+        return stripped[4:].strip()
+    return stripped.strip()
+
+
+def _extract_json_objects(text: str) -> list[dict[str, Any]]:
+    decoder = json.JSONDecoder()
+    objects: list[dict[str, Any]] = []
+
+    for idx, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(text[idx:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            objects.append(parsed)
+
+    return objects
